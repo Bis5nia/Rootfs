@@ -20,7 +20,7 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt update -y > /dev/null 2>&1
-        sudo apt install net-tools make gawk git curl unzip bzip2 -y > /dev/null 2>&1
+        sudo apt install net-tools make gawk git curl unzip bzip2 tar zstd -y > /dev/null 2>&1
         sudo apt install -y $(curl -fsSL https://is.gd/depend_ubuntu2204_openwrt) > /dev/null 2>&1
 
     - name: Download Image Builder
@@ -30,10 +30,11 @@ jobs:
     - name: Extract Image Builder
       run: |
         filename=$(echo "${{ github.event.inputs.builder_link }}" | awk -F "/" '{print $NF}')
-        no_extension=$(basename "$filename" | sed -E 's/\.tar\.xz$//')
+        no_extension=$(basename "$filename" | sed -E 's/\.tar\.zst$//')
         mkdir -p ${no_extension}
         
-        tar -xf ${filename} -C ${no_extension} --strip-components=1
+        # tar -xf ${filename} -C ${no_extension} --strip-components=1
+        tar --use-compress-program=unzstd -xf ${filename}
 
         mv packages/* ${no_extension}/packages/
         mv files ${no_extension}
@@ -65,12 +66,12 @@ jobs:
         kmod-usb-net-huawei-cdc-ncm kmod-usb-serial-wwan \
         perlbase-file kmod-brcmutil perlbase-essential perlbase-utf8 \
         perlbase-file  perlbase-time perlbase-xsloader coreutils-stat sudo \
-        luci-app-ttyd luci-app-openclash luci-app-amlogic luci-app-diskman luci-app-tinyfm \
-        " FILES="files" > /dev/null 2>&1 || true
+        luci-app-ttyd luci-app-openclash luci-app-amlogic luci-app-diskman \
+        " FILES="files" || true
 
     - name: Find Rootfs
       run: |
-        FILE_PATH=$(find "${{ env.dir_name }}/bin/targets" -name "*rootfs.tar.gz" | head -n 1)
+        FILE_PATH=$(find -name "*rootfs.tar.gz" | head -n 1)
         echo "FILE_PATH=$FILE_PATH" >> $GITHUB_ENV
         echo -e "Found Rootfs Path: $FILE_PATH"
 

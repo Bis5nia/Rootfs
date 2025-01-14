@@ -5,8 +5,16 @@ on:
       rootfs_name:
         description: 'Rootfs Output Name'
         required: true
+      link_type:
+        description: 'Select Link Type'
+        required: true
+        default: 'Wget'
+        type: choice
+        options:
+          - Wget
+          - GDrive
       fw_link:
-        description: 'Insert firmware link (Wget)'
+        description: 'Insert firmware link'
         required: true
 
 jobs:
@@ -14,9 +22,23 @@ jobs:
     name: Download Firmware
     runs-on: ubuntu-latest
     steps:
-      - name: Download Fw
+      - name: Set Up Environment
         run: |
-          wget ${{ github.event.inputs.fw_link }} > /dev/null 2>&1
+          sudo apt update > /dev/null 2>&1
+          sudo apt install -y python3 python3-pip > /dev/null 2>&1
+          pip3 install gdown > /dev/null 2>&1
+          mkdir -p downloads
+        
+      - name: Download FW
+        run: |
+          if [ "${{ github.event.inputs.link_type }}" == "Wget" ]; then
+            wget "${{ github.event.inputs.fw_link }}"
+          elif [ "${{ github.event.inputs.link_type }}" == "GDrive" ]; then
+            gdown https://drive.google.com/uc?id=${{ github.event.inputs.fw_link }}
+          else
+            echo "Error: Unsupported rootfs_type selected."
+            exit 1
+          fi
           FW_PATH=$(find ./ -name "*img.*")
           echo "FW_PATH=$FW_PATH" >> $GITHUB_ENV
 

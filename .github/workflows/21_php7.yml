@@ -1,0 +1,87 @@
+name: Build Rootfs 21 PHP7
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      builder_link:
+        description: "Insert ImageBuilder Link"
+        required: true
+        default: ""
+
+jobs:
+  make_rootfs:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt update -y > /dev/null 2>&1
+        sudo apt install net-tools make gawk git curl unzip bzip2 zstd tar -y > /dev/null 2>&1
+        sudo apt install -y $(curl -fsSL https://is.gd/depend_ubuntu2204_openwrt) > /dev/null 2>&1
+
+    - name: Download Image Builder
+      run: |
+        wget -q "${{ github.event.inputs.builder_link }}" > /dev/null 2>&1
+
+    - name: Extract Image Builder
+      run: |
+        filename=$(echo "${{ github.event.inputs.builder_link }}" | awk -F "/" '{print $NF}')
+        no_extension=$(basename "$filename" | sed -E 's/\.tar\.xz$//')
+        mkdir -p ${no_extension}
+        
+        tar -xf ${filename} -C ${no_extension} --strip-components=1
+        mv packages/* ${no_extension}/packages/
+        
+        sed -i 's/option check_signature/# option check_signature/g' ${no_extension}/repositories.conf
+        sed -i '/# src custom file:\/\/\/usr\/src\/openwrt\/bin\/armsr\/packages/a src/gz mutiara_wrt https://raw.githubusercontent.com/maizil41/mutiara-wrt-opkg/main/generic' ${no_extension}/repositories.conf      
+
+        echo "dir_name=${no_extension}" >> $GITHUB_ENV
+        
+    - name: Build OpenWRT Rootfs
+      run: |
+        cd ${{ env.dir_name }}
+        make image PROFILE="Default" PACKAGES=" \
+        -dnsmasq \
+        dnsmasq-full cgi-io libiwinfo libiwinfo-data libiwinfo-lua liblua liblucihttp liblucihttp-lua \
+        libubus-lua lua luci luci-app-firewall luci-app-opkg luci-base luci-lib-base \
+        luci-lib-ip luci-lib-jsonc luci-lib-nixio luci-mod-admin-full luci-mod-network \
+        luci-mod-status luci-mod-system luci-proto-ipv6 luci-proto-ppp luci-ssl \
+        luci-theme-bootstrap px5g-wolfssl rpcd rpcd-mod-file rpcd-mod-iwinfo rpcd-mod-luci \
+        rpcd-mod-rrdns uhttpd uhttpd-mod-ubus luci-compat \
+        ath9k-htc-firmware btrfs-progs hostapd hostapd-utils kmod-ath kmod-ath9k kmod-ath9k-common \
+        kmod-ath9k-htc kmod-cfg80211 kmod-crypto-acompress kmod-crypto-crc32c kmod-crypto-hash \
+        kmod-fs-btrfs kmod-mac80211 wireless-tools wpa-cli wpa-supplicant \
+        libc php7 php7-cgi php7-mod-session php7-mod-ctype php7-mod-fileinfo php7-mod-zip php7-mod-iconv php7-mod-mbstring php7-mod-json \
+        zoneinfo-core zoneinfo-asia nano htop unzip wget wget-ssl libmbedtls tar bash luci-theme-material \
+        git git-http jq openssh-client openssl-util luci-app-ttyd ttyd luci-app-vnstat2 \
+        netdata httping coreutils-timeout httping kmod-usb-net-rndis perl fdisk iperf3 \
+        usbutils kmod-usb-net-cdc-ether usb-modeswitch openssh-sftp-server kmod-usb2 \
+        kmod-usb-net-huawei-cdc-ncm kmod-usb-serial-wwan \
+        perlbase-file kmod-brcmutil perlbase-essential perlbase-utf8 \
+        perlbase-file  perlbase-time perlbase-xsloader coreutils-stat sudo \
+        luci-app-amlogic luci-app-diskman luci-app-openclash \
+        " FILES="files" || true
+
+    - name: Find Rootfs
+      run: |
+        FILE_PATH=$(find -name "*rootfs.tar.gz" | head -n 1)
+        echo "FILE_PATH=$FILE_PATH" >> $GITHUB_ENV
+        echo -e "Found Rootfs Path: $FILE_PATH"
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+      with:
+        name: Mutiara-Wrt Rootfs
+        tag_name: all
+        draft: false
+        prerelease: false
+        files: |
+              ${{ env.FILE_PATH }}
+        body: |
+              Kumpulan Rootfs
